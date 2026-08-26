@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barbeiro — Admin Navalha</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="wide-shell">
+  <div id="sidebar"></div>
+  <div class="main" id="main"></div>
+</div>
+
+<script src="../assets/js/mock-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  renderSidebar('barbeiros', 'admin');
+  const b = getBarberById(qs('id'));
+  const main = document.getElementById('main');
+
+  if (!b) {
+    main.innerHTML = `<div class="empty-state"><div class="icon">🔎</div>Barbeiro não encontrado.</div>`;
+  } else {
+    const shop = b.shopId ? getShopById(b.shopId) : null;
+    const w = computeWallet(b);
+    const history = APPOINTMENTS.filter(a => a.barberId === b.id).sort((x, y) => (x.status === 'Concluído') - (y.status === 'Concluído'));
+
+    main.innerHTML = `
+      <a href="barbeiros.html" class="link" style="display:inline-block; margin-bottom:14px;">← Todos os barbeiros</a>
+      <div style="display:flex; gap:16px; align-items:center; margin-bottom:22px; flex-wrap:wrap;">
+        <img src="${b.photo}" style="width:74px; height:74px; border-radius:18px;">
+        <div style="flex:1;">
+          <h1 class="display" style="font-size:22px;">${b.name}</h1>
+          <div class="rating">${starString(b.rating)} <span class="mono">${b.rating}</span> <span class="small muted">(${b.reviewCount} avaliações)</span></div>
+          <div class="small muted" style="margin-top:3px;">📍 ${b.neighborhood} · ${b.distanceKm} km ${shop ? '· ' + shop.name : '· Autônomo'}</div>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          ${b.online ? '<span class="badge badge-success"><span class="badge-dot"></span> Online</span>' : '<span class="badge badge-muted">Offline</span>'}
+          ${b.attendsHome ? '<span class="badge badge-gold">🏠 Domicílio</span>' : ''}
+          ${b.attendsShop ? '<span class="badge badge-muted">💈 Barbearia</span>' : ''}
+        </div>
+      </div>
+
+      <p class="muted small" style="max-width:640px; margin-bottom:22px;">${b.bio}</p>
+
+      <div class="stat-grid" style="margin-bottom:26px;">
+        <div class="stat-card"><div class="lbl">Atendimentos concluídos</div><div class="val mono">${w.completed.length}</div></div>
+        <div class="stat-card"><div class="lbl">Faturamento bruto</div><div class="val mono">${formatBRL(w.gross)}</div></div>
+        <div class="stat-card"><div class="lbl">Taxa retida (${PLATFORM_FEE_PCT}%)</div><div class="val mono" style="color:var(--danger);">${formatBRL(w.fee)}</div></div>
+        <div class="stat-card"><div class="lbl">Saldo disponível</div><div class="val mono" style="color:var(--gold-bright);">${formatBRL(w.available)}</div></div>
+      </div>
+
+      <div class="section-title"><h2>Serviços cadastrados</h2></div>
+      <div style="display:flex; flex-direction:column; gap:8px; max-width:520px; margin-bottom:26px;">
+        ${b.services.map(s => `<div class="card" style="display:flex; justify-content:space-between; padding:11px 14px;"><span>${s.icon} ${s.name}</span><span class="mono price">${formatBRL(s.price)}</span></div>`).join('')}
+      </div>
+
+      <div class="section-title"><h2>Histórico de atendimentos</h2></div>
+      <div class="tbl-wrap" style="margin-bottom:26px;">
+        <table class="tbl">
+          <thead><tr><th>Data</th><th>Cliente</th><th>Serviços</th><th>Valor</th><th>Status</th></tr></thead>
+          <tbody>
+            ${history.length ? history.map(a => `<tr>
+              <td class="mono">${a.date} ${a.time}</td>
+              <td>${a.customerName}</td>
+              <td class="muted">${(a.serviceNames || []).join(', ')}</td>
+              <td class="mono">${formatBRL(a.price)}</td>
+              <td><span class="badge ${statusBadgeClass(a.status)}">${a.status}</span></td>
+            </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center; padding:24px;">Sem atendimentos.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-title"><h2>Saques solicitados</h2></div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Data</th><th>Valor</th><th>Status</th></tr></thead>
+          <tbody>
+            ${w.withdrawals.length ? w.withdrawals.map(x => `<tr><td class="mono">${x.date}</td><td class="mono">${formatBRL(x.amount)}</td><td><span class="badge ${x.status === 'Pago' ? 'badge-success' : 'badge-gold'}">${x.status}</span></td></tr>`).join('') : `<tr><td colspan="3" class="muted" style="text-align:center; padding:24px;">Nenhum saque.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+</script>
+</body>
+</html>

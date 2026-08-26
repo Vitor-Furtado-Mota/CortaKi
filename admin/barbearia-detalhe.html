@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barbearia — Admin Navalha</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="wide-shell">
+  <div id="sidebar"></div>
+  <div class="main" id="main"></div>
+</div>
+
+<script src="../assets/js/mock-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  renderSidebar('barbearias', 'admin');
+  const shop = getShopById(qs('id'));
+  const main = document.getElementById('main');
+
+  if (!shop) {
+    main.innerHTML = `<div class="empty-state"><div class="icon">🔎</div>Barbearia não encontrada.</div>`;
+  } else {
+    const barbers = BARBERS.filter(b => b.shopId === shop.id);
+    const wallets = barbers.map(b => ({ barber: b, w: computeWallet(b) }));
+    const gross = wallets.reduce((s, x) => s + x.w.gross, 0);
+    const fee = gross * PLATFORM_FEE_PCT / 100;
+    const completedCount = wallets.reduce((s, x) => s + x.w.completed.length, 0);
+    const allApts = APPOINTMENTS.filter(a => barbers.some(b => b.id === a.barberId));
+
+    main.innerHTML = `
+      <a href="barbearias.html" class="link" style="display:inline-block; margin-bottom:14px;">← Todas as barbearias</a>
+      <div style="display:flex; gap:16px; align-items:center; margin-bottom:22px; flex-wrap:wrap;">
+        <div style="width:60px; height:60px; border-radius:16px; background:var(--gold-wash); display:flex; align-items:center; justify-content:center; font-size:26px;">🏪</div>
+        <div>
+          <h1 class="display" style="font-size:22px;">${shop.name}</h1>
+          <div class="small muted" style="margin-top:3px;">📍 ${shop.neighborhood} · ${shop.distanceKm} km</div>
+        </div>
+      </div>
+
+      <div class="stat-grid" style="margin-bottom:26px;">
+        <div class="stat-card"><div class="lbl">Barbeiros vinculados</div><div class="val mono">${barbers.length}</div></div>
+        <div class="stat-card"><div class="lbl">Atendimentos concluídos</div><div class="val mono">${completedCount}</div></div>
+        <div class="stat-card"><div class="lbl">Faturamento bruto</div><div class="val mono">${formatBRL(gross)}</div></div>
+        <div class="stat-card"><div class="lbl">Receita da plataforma</div><div class="val mono" style="color:var(--gold-bright);">${formatBRL(fee)}</div></div>
+      </div>
+
+      <div class="section-title"><h2>Barbeiros desta barbearia</h2></div>
+      <div class="tbl-wrap" style="margin-bottom:26px;">
+        <table class="tbl">
+          <thead><tr><th>Barbeiro</th><th>Status</th><th>Avaliação</th><th>Atendimentos</th><th>Faturamento</th><th>Saldo disponível</th></tr></thead>
+          <tbody>
+            ${wallets.map(x => `<tr class="clickable" onclick="location.href='barbeiro-detalhe.html?id=${x.barber.id}'">
+              <td style="display:flex; align-items:center; gap:9px;"><img src="${x.barber.photo}" style="width:26px; height:26px; border-radius:7px;">${x.barber.name}</td>
+              <td>${x.barber.online ? '<span class="badge badge-success"><span class="badge-dot"></span> Online</span>' : '<span class="badge badge-muted">Offline</span>'}</td>
+              <td>${x.barber.rating} ★</td>
+              <td class="mono">${x.w.completed.length}</td>
+              <td class="mono">${formatBRL(x.w.gross)}</td>
+              <td class="mono">${formatBRL(x.w.available)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-title"><h2>Atendimentos recentes</h2></div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Data</th><th>Barbeiro</th><th>Cliente</th><th>Valor</th><th>Status</th></tr></thead>
+          <tbody>
+            ${allApts.length ? allApts.map(a => `<tr>
+              <td class="mono">${a.date} ${a.time}</td>
+              <td>${a.barberName}</td>
+              <td class="muted">${a.customerName}</td>
+              <td class="mono">${formatBRL(a.price)}</td>
+              <td><span class="badge ${statusBadgeClass(a.status)}">${a.status}</span></td>
+            </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center; padding:24px;">Sem atendimentos.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+</script>
+</body>
+</html>

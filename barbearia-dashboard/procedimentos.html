@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Procedimentos da barbearia — CortaKi</title><link rel="stylesheet" href="../assets/css/style.css"></head>
+<body><div class="wide-shell"><div id="sidebar"></div><main class="main">
+  <h1 class="display" style="font-size:23px;">Procedimentos</h1><p class="small muted" style="margin:5px 0 22px;">Edite todos os serviços oferecidos pela barbearia.</p>
+  <form id="service-form" class="card" style="max-width:760px;margin-bottom:24px;">
+    <input type="hidden" id="service-id">
+    <div class="management-grid-3">
+      <div class="field"><label>Nome do procedimento</label><input id="service-name" required placeholder="Ex.: Corte degradê"></div>
+      <div class="field"><label>Preço (R$)</label><input id="service-price" type="number" min="0" step="0.01" required></div>
+      <div class="field"><label>Duração (min)</label><input id="service-duration" type="number" min="5" step="5" required></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary" type="submit" id="submit-service">Adicionar procedimento</button><button class="btn btn-secondary" type="button" id="cancel-edit" style="display:none;">Cancelar edição</button></div>
+  </form>
+  <div class="section-title"><h2>Procedimentos cadastrados</h2></div><div id="services-list" style="max-width:760px;display:flex;flex-direction:column;gap:10px;"></div>
+</main></div><script src="../assets/js/mock-data.js"></script><script src="../assets/js/app.js"></script><script>
+renderSidebar('procedimentos','shop'); const KEY='cortaki_shop_services';
+let services=JSON.parse(localStorage.getItem(KEY)||'null')||DEMO_USERS.shop.services||[];
+const save=()=>localStorage.setItem(KEY,JSON.stringify(services));
+function resetForm(){document.getElementById('service-form').reset();document.getElementById('service-id').value='';document.getElementById('submit-service').textContent='Adicionar procedimento';document.getElementById('cancel-edit').style.display='none';}
+function render(){const list=document.getElementById('services-list');list.innerHTML=services.length?services.map(s=>`<div class="card" style="padding:15px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;opacity:${s.active===false?'.58':'1'}"><div style="flex:1;min-width:180px"><strong>${s.icon||'✂️'} ${s.name}</strong><div class="small muted" style="margin-top:4px">${s.durationMin} min · <span class="mono">${formatBRL(s.price)}</span> · ${s.active===false?'Inativo':'Ativo'}</div></div><button class="btn btn-secondary btn-sm" data-toggle="${s.id}">${s.active===false?'Ativar':'Desativar'}</button><button class="btn btn-secondary btn-sm" data-edit="${s.id}">Editar</button><button class="btn btn-ghost btn-sm" data-remove="${s.id}">Excluir</button></div>`).join(''):'<div class="empty-state"><div class="icon">✂️</div>Nenhum procedimento cadastrado.</div>';
+list.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const s=services.find(x=>x.id===b.dataset.edit);document.getElementById('service-id').value=s.id;document.getElementById('service-name').value=s.name;document.getElementById('service-price').value=s.price;document.getElementById('service-duration').value=s.durationMin;document.getElementById('submit-service').textContent='Salvar alterações';document.getElementById('cancel-edit').style.display='inline-flex';window.scrollTo({top:0,behavior:'smooth'});});
+list.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>{const s=services.find(x=>x.id===b.dataset.toggle);s.active=s.active===false;save();render();});
+list.querySelectorAll('[data-remove]').forEach(b=>b.onclick=async()=>{if(await showAppConfirm('Excluir este procedimento?',{title:'Excluir procedimento'})){services=services.filter(x=>x.id!==b.dataset.remove);save();render();}});}
+document.getElementById('service-form').onsubmit=e=>{e.preventDefault();const id=document.getElementById('service-id').value;const data={id:id||'shop-svc-'+Date.now(),icon:'✂️',name:document.getElementById('service-name').value.trim(),price:Number(document.getElementById('service-price').value),durationMin:Number(document.getElementById('service-duration').value),active:true};const i=services.findIndex(s=>s.id===id);if(i>=0)data.active=services[i].active!==false,i>=0&&(services[i]=data);else services.push(data);save();resetForm();render();};
+document.getElementById('cancel-edit').onclick=resetForm;render();
+</script></body></html>

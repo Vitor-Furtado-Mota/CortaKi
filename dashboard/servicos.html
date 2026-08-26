@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Serviços — Navalha</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="wide-shell">
+  <div id="sidebar"></div>
+  <div class="main">
+    <h1 class="display" style="font-size:22px; margin-bottom:6px;">Seus serviços</h1>
+    <p class="muted small" style="margin-bottom:22px;">Preços e disponibilidade que aparecem para os clientes. Cadastre combos somente quando o valor cobrir corretamente seus custos e tempo de trabalho.</p>
+
+    <div class="card" style="max-width:520px; margin-bottom:24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0;">
+        <div>
+          <div style="font-weight:600; font-size:14px;">🏠 Atende a domicílio</div>
+          <div class="small muted">Aparece no "Chamar agora" e nas buscas por domicílio</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="toggle-home"><span class="track"></span></label>
+      </div>
+      <hr class="divider">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0;">
+        <div>
+          <div style="font-weight:600; font-size:14px;">💈 Atende na barbearia</div>
+          <div class="small muted">Aparece nas buscas por atendimento no local</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="toggle-shop"><span class="track"></span></label>
+      </div>
+    </div>
+
+    <div class="section-title"><h2>Serviços cadastrados</h2></div>
+    <div class="svc-list" id="my-services" style="max-width:520px;"></div>
+
+    <div class="section-title"><h2>Adicionar do catálogo</h2></div>
+    <div class="chip-group" id="catalog-chips" style="max-width:520px;"></div>
+  </div>
+</div>
+
+<script src="../assets/js/mock-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  renderSidebar('servicos', 'barber');
+  const me = DEMO_USERS.barber;
+  const SERVICES_KEY = `cortaki_barber_services_${me.id}`;
+  const savedServices = safeStoredJSON(SERVICES_KEY, null);
+  if (Array.isArray(savedServices)) me.services = savedServices;
+
+  function saveServices() {
+    localStorage.setItem(SERVICES_KEY, JSON.stringify(me.services));
+  }
+
+  const homeToggle = document.getElementById('toggle-home');
+  const shopToggle = document.getElementById('toggle-shop');
+  homeToggle.checked = me.attendsHome;
+  shopToggle.checked = me.attendsShop;
+  homeToggle.addEventListener('change', () => { me.attendsHome = homeToggle.checked; });
+  shopToggle.addEventListener('change', () => { me.attendsShop = shopToggle.checked; });
+
+  function renderServices() {
+    document.getElementById('my-services').innerHTML = me.services.map(s => `
+      <div class="svc-row selected" style="cursor:default;">
+        <div class="info">
+          <div class="n">${s.icon} ${s.name}</div>
+          <div class="d">${s.durationMin} min</div>
+        </div>
+        <input type="text" class="mono" data-id="${s.id}" value="${s.price}" style="width:64px; text-align:right; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; color:var(--gold-bright); padding:6px 8px;">
+        <button class="btn btn-ghost btn-sm" data-remove="${s.id}" title="Remover">✕</button>
+      </div>
+    `).join('');
+    document.querySelectorAll('#my-services input').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const s = me.services.find(x => x.id === inp.dataset.id);
+        s.price = Math.max(0, Number(inp.value) || 0);
+        me.startingPrice = computeStartingPrice(me);
+        saveServices();
+      });
+    });
+    document.querySelectorAll('#my-services [data-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        me.services = me.services.filter(s => s.id !== btn.dataset.remove);
+        me.startingPrice = computeStartingPrice(me);
+        saveServices();
+        renderServices(); renderCatalog();
+      });
+    });
+    renderCatalog();
+  }
+
+  function renderCatalog() {
+    const mineIds = me.services.map(s => s.id);
+    const available = SERVICE_CATALOG.filter(s => !mineIds.includes(s.id));
+    document.getElementById('catalog-chips').innerHTML = available.length ? available.map(s => `
+      <div class="chip" data-add="${s.id}">+ ${s.icon} ${s.name} <span class="mono">${formatBRL(s.price)}</span>${s.id === 'svc-combo' ? '<span class="small" style="color:var(--danger)"> · revise o preço</span>' : ''}</div>
+    `).join('') : `<span class="small muted">Todos os serviços do catálogo já foram adicionados.</span>`;
+    document.querySelectorAll('#catalog-chips [data-add]').forEach(chip => {
+      chip.addEventListener('click', () => {
+        me.services.push(svc(chip.dataset.add));
+        me.startingPrice = computeStartingPrice(me);
+        saveServices();
+        renderServices();
+      });
+    });
+  }
+
+  renderServices();
+</script>
+</body>
+</html>

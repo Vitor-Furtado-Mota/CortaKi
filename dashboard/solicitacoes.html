@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solicitações — Navalha</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="wide-shell">
+  <div id="sidebar"></div>
+  <div class="main">
+    <h1 class="display" style="font-size:22px; margin-bottom:6px;">Solicitações</h1>
+    <p class="muted small" style="margin-bottom:22px;">Agendamentos aguardando sua confirmação. Chamadas instantâneas ("Chamar agora") aparecem como alerta no Painel enquanto você estiver disponível.</p>
+    <div class="chip-group" id="request-tabs" style="margin-bottom:16px; max-width:640px;">
+      <div class="chip selected" data-value="pendentes">Pendentes</div>
+      <div class="chip" data-value="confirmados">Confirmados e chat</div>
+    </div>
+    <div id="list" style="display:flex; flex-direction:column; gap:12px; max-width:640px;"></div>
+  </div>
+</div>
+
+<script src="../assets/js/mock-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  renderSidebar('solicitacoes', 'barber');
+  const me = DEMO_USERS.barber;
+  const APPOINTMENTS_KEY = 'navalha_appointments';
+  const CHAT_KEY = 'navalha_appointment_chats';
+  const CUSTOMER_NOTIFICATIONS_KEY = 'navalha_customer_notifications';
+  let tab = 'pendentes';
+
+  function getSavedAppointments() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(APPOINTMENTS_KEY) || '[]');
+      return Array.isArray(saved) ? saved : [];
+    } catch { return []; }
+  }
+
+  function getChats() {
+    try { return JSON.parse(localStorage.getItem(CHAT_KEY) || '{}'); } catch { return {}; }
+  }
+
+  function toggleChat(id) {
+    const chat = document.getElementById(`chat-${id}`);
+    chat.style.display = chat.style.display === 'none' ? 'block' : 'none';
+  }
+
+  function sendMessage(id) {
+    const input = document.getElementById(`chat-input-${id}`);
+    const text = input.value.trim();
+    if (!text) return;
+    const chats = getChats();
+    if (!Array.isArray(chats[id])) chats[id] = [];
+    chats[id].push({ from: 'barber', text, at: new Date().toISOString() });
+    localStorage.setItem(CHAT_KEY, JSON.stringify(chats));
+    render();
+  }
+
+  document.querySelectorAll('#request-tabs .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#request-tabs .chip').forEach(item => item.classList.remove('selected'));
+      chip.classList.add('selected');
+      tab = chip.dataset.value;
+      render();
+    });
+  });
+
+  function render() {
+    const saved = getSavedAppointments();
+    const merged = [...saved, ...APPOINTMENTS].filter((appointment, index, list) =>
+      list.findIndex(item => item.id === appointment.id) === index
+    );
+    const chats = getChats();
+    const requests = merged.filter(a => a.barberId === me.id && (tab === 'pendentes' ? a.status === 'Solicitado' : a.status === 'Confirmado'));
+    document.getElementById('list').innerHTML = requests.length ? requests.map(a => `
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div>
+            <div style="font-weight:600;">${a.customerName}</div>
+            <div class="small muted">${(a.serviceNames || []).join(', ')} · ${a.type === 'domicilio' ? 'Domicílio' : 'Barbearia'}</div>
+          </div>
+          <span class="mono price" style="color:var(--gold-bright);">${formatBRL(a.price)}</span>
+        </div>
+        <div class="ticket-row" style="padding-bottom:0;"><span class="label">Quando</span><span class="mono">${a.date} às ${a.time}</span></div>
+        <div class="ticket-row"><span class="label">Pagamento</span><span class="badge badge-success">${a.payment.method} · ${a.payment.status}</span></div>
+        ${a.customerHairPhoto ? `<div class="card" style="margin-top:10px; background:var(--surface-2);"><strong class="small">📷 Foto enviada pelo cliente</strong><img src="${a.customerHairPhoto}" alt="Estado atual do cabelo" class="request-photo-preview"><p class="small muted" style="margin-top:7px;">Use a foto para preparar máquinas, pentes e produtos necessários.</p></div>` : ''}
+        ${a.status === 'Solicitado' ? `
+          <div style="display:flex; gap:10px; margin-top:8px;">
+            <button class="btn btn-secondary btn-block" onclick="decide('${a.id}', false)">Recusar</button>
+            <button class="btn btn-primary btn-block" onclick="decide('${a.id}', true)">Confirmar</button>
+          </div>
+        ` : `
+          <a class="btn btn-secondary btn-block" style="margin-top:8px;" href="atendimento-detalhe.html?id=${a.id}">🔐 Abrir atendimento seguro</a>
+          <button class="btn btn-primary btn-block" style="margin-top:8px;" onclick="toggleChat('${a.id}')">💬 Abrir chat com o cliente</button>
+          <div id="chat-${a.id}" class="card" style="display:none; margin-top:12px; background:var(--surface-2);">
+            <div style="font-weight:600; margin-bottom:10px;">Chat com ${a.customerName}</div>
+            <div style="display:flex; flex-direction:column; gap:7px; margin-bottom:10px; max-height:180px; overflow:auto;">
+              ${(chats[a.id] || []).length ? (chats[a.id] || []).map(message => `
+                <div class="small" style="align-self:${message.from === 'barber' ? 'flex-end' : 'flex-start'}; max-width:82%; padding:8px 10px; border-radius:10px; background:${message.from === 'barber' ? 'var(--gold)' : 'var(--surface-3)'}; color:${message.from === 'barber' ? '#111' : 'var(--text)'};">${message.text}</div>
+              `).join('') : `<div class="small muted">Nenhuma mensagem ainda.</div>`}
+            </div>
+            <div style="display:flex; gap:8px;">
+              <input id="chat-input-${a.id}" type="text" placeholder="Digite sua mensagem..." style="flex:1;">
+              <button class="btn btn-primary btn-sm" onclick="sendMessage('${a.id}')">Enviar</button>
+            </div>
+          </div>
+        `}
+      </div>
+    `).join('') : `<div class="empty-state"><div class="icon">🔔</div>${tab === 'pendentes' ? 'Nenhuma solicitação pendente no momento.' : 'Nenhum atendimento confirmado no momento.'}</div>`;
+  }
+
+  function decide(id, accept) {
+    const saved = getSavedAppointments();
+    const apt = saved.find(a => a.id === id) || APPOINTMENTS.find(a => a.id === id);
+    if (!apt) return;
+    apt.status = accept ? 'Confirmado' : 'Cancelado';
+    if (!apt.securityCode) apt.securityCode = String(Math.floor(100000 + Math.random() * 900000));
+    if (typeof apt.securityVerified !== 'boolean') apt.securityVerified = false;
+    if (!apt.settlement) apt.settlement = { status: 'Retido', barberAmount: 0, customerRefund: 0 };
+    if (!accept) {
+      apt.payment.status = 'Reembolsado';
+      apt.cancelledBy = 'barber';
+      apt.cancellationReason = 'Solicitação recusada pelo barbeiro.';
+      let notifications = [];
+      try { notifications = JSON.parse(localStorage.getItem(CUSTOMER_NOTIFICATIONS_KEY) || '[]'); } catch {}
+      if (!Array.isArray(notifications)) notifications = [];
+      notifications.unshift({ id: `notice-${Date.now()}`, customerId: apt.customerId, appointmentId: apt.id, type: 'barber-cancellation', message: `${me.name} não pôde aceitar seu atendimento. O valor integral será reembolsado.`, createdAt: new Date().toISOString(), read: false });
+      localStorage.setItem(CUSTOMER_NOTIFICATIONS_KEY, JSON.stringify(notifications));
+    }
+    const stored = saved.find(a => a.id === id);
+    if (stored) {
+      stored.status = apt.status;
+      stored.payment = apt.payment;
+    } else {
+      saved.push(apt);
+    }
+    localStorage.setItem(APPOINTMENTS_KEY, JSON.stringify(saved));
+    if (accept) {
+      location.href = `atendimento-detalhe.html?id=${apt.id}`;
+      return;
+    }
+    render();
+  }
+
+  render();
+  window.addEventListener('storage', render);
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barbeiros — Admin Navalha</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="wide-shell">
+  <div id="sidebar"></div>
+  <div class="main">
+    <h1 class="display" style="font-size:22px; margin-bottom:6px;">Barbeiros</h1>
+    <p class="muted small" style="margin-bottom:18px;">Todos os profissionais cadastrados na plataforma.</p>
+
+    <div class="searchbar">
+      <input type="text" id="search" placeholder="Buscar por nome ou bairro...">
+      <select id="filter-shop">
+        <option value="">Todas as barbearias</option>
+        <option value="__none">Autônomos</option>
+      </select>
+      <select id="filter-online">
+        <option value="">Online e offline</option>
+        <option value="1">Somente online</option>
+        <option value="0">Somente offline</option>
+      </select>
+    </div>
+
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>Barbeiro</th><th>Barbearia</th><th>Status</th><th>Avaliação</th><th>Atendimentos</th><th>Faturamento</th><th>Saldo disponível</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/mock-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  renderSidebar('barbeiros', 'admin');
+
+  const shopSelect = document.getElementById('filter-shop');
+  BARBERSHOPS.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id; opt.textContent = s.name;
+    shopSelect.appendChild(opt);
+  });
+
+  let state = { q: '', shop: '', online: '' };
+  document.getElementById('search').addEventListener('input', e => { state.q = e.target.value.toLowerCase(); render(); });
+  shopSelect.addEventListener('change', e => { state.shop = e.target.value; render(); });
+  document.getElementById('filter-online').addEventListener('change', e => { state.online = e.target.value; render(); });
+
+  function render() {
+    let list = BARBERS.filter(b => {
+      if (state.q && !(b.name.toLowerCase().includes(state.q) || b.neighborhood.toLowerCase().includes(state.q))) return false;
+      if (state.shop === '__none' && b.shopId) return false;
+      if (state.shop && state.shop !== '__none' && b.shopId !== state.shop) return false;
+      if (state.online === '1' && !b.online) return false;
+      if (state.online === '0' && b.online) return false;
+      return true;
+    });
+
+    document.getElementById('tbody').innerHTML = list.length ? list.map(b => {
+      const shop = b.shopId ? getShopById(b.shopId) : null;
+      const w = computeWallet(b);
+      return `<tr class="clickable" onclick="location.href='barbeiro-detalhe.html?id=${b.id}'">
+        <td style="display:flex; align-items:center; gap:9px;"><img src="${b.photo}" style="width:28px; height:28px; border-radius:8px;">${b.name}</td>
+        <td class="muted">${shop ? shop.name : 'Autônomo'}</td>
+        <td>${b.online ? '<span class="badge badge-success"><span class="badge-dot"></span> Online</span>' : '<span class="badge badge-muted">Offline</span>'}</td>
+        <td>${b.rating} ★</td>
+        <td class="mono">${w.completed.length}</td>
+        <td class="mono">${formatBRL(w.gross)}</td>
+        <td class="mono">${formatBRL(w.available)}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="7" class="muted" style="text-align:center; padding:26px;">Nenhum barbeiro encontrado.</td></tr>`;
+  }
+
+  render();
+</script>
+</body>
+</html>

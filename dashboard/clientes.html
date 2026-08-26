@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clientes — Navalha</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="wide-shell">
+  <div id="sidebar"></div>
+  <div class="main">
+    <h1 class="display" style="font-size:22px; margin-bottom:6px;">Seus clientes</h1>
+    <p class="muted small" style="margin-bottom:22px;">Todo mundo que já foi atendido por você na Navalha.</p>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>Cliente</th><th>Atendimentos</th><th>Última visita</th><th>Total gasto</th><th>Avaliação dada</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/mock-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  renderSidebar('clientes', 'barber');
+  const me = DEMO_USERS.barber;
+  const mine = APPOINTMENTS.filter(a => a.barberId === me.id && a.status !== 'Cancelado');
+
+  const byCustomer = {};
+  mine.forEach(a => {
+    if (!byCustomer[a.customerId]) byCustomer[a.customerId] = { name: a.customerName, count: 0, total: 0, last: a.date, ratings: [] };
+    const c = byCustomer[a.customerId];
+    c.count++; c.total += a.price;
+    if (a.rating) c.ratings.push(a.rating);
+  });
+
+  const rows = Object.values(byCustomer);
+  document.getElementById('tbody').innerHTML = rows.length ? rows.map(c => `
+    <tr>
+      <td style="font-weight:600;">${c.name}</td>
+      <td class="mono">${c.count}</td>
+      <td class="mono">${c.last}</td>
+      <td class="mono">${formatBRL(c.total)}</td>
+      <td>${c.ratings.length ? c.ratings[c.ratings.length - 1] + ' ★' : '—'}</td>
+    </tr>
+  `).join('') : `<tr><td colspan="5" class="muted" style="text-align:center; padding:26px;">Nenhum cliente atendido ainda.</td></tr>`;
+</script>
+</body>
+</html>

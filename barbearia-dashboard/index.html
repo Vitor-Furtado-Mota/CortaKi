@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel da barbearia — CortaKi</title><link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body><div class="wide-shell"><div id="sidebar"></div><main class="main">
+  <div class="dashboard-page-logo"><img data-brand-logo alt="CortaKi"></div>
+  <h1 class="display" style="font-size:24px;">Olá, <span id="shop-name"></span> 👋</h1>
+  <p class="muted small" style="margin:5px 0 24px;">Gerencie os procedimentos e a equipe da sua barbearia.</p>
+  <div class="stat-grid">
+    <div class="stat-card"><div class="lbl">Barbeiros cadastrados</div><div class="val mono" id="barbers-count">0</div></div>
+    <div class="stat-card"><div class="lbl">Procedimentos ativos</div><div class="val mono" id="services-count">0</div></div>
+    <div class="stat-card"><div class="lbl">Profissionais online</div><div class="val mono" id="online-count">0</div></div>
+    <div class="stat-card"><div class="lbl">Avaliação da equipe</div><div class="val mono" id="rating-average">—</div></div>
+  </div>
+  <div class="section-title"><h2>Acesso rápido</h2></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;">
+    <a class="card" href="procedimentos.html"><strong>✂️ Editar procedimentos</strong><p class="small muted" style="margin-top:7px;">Cadastre, altere preços, duração e disponibilidade.</p></a>
+    <a class="card" href="barbeiros.html"><strong>👥 Gerenciar barbeiros</strong><p class="small muted" style="margin-top:7px;">Adicione profissionais e controle a equipe vinculada.</p></a>
+    <a class="card" href="perfil.html"><strong>🏪 Editar perfil</strong><p class="small muted" style="margin-top:7px;">Atualize nome, descrição, contato e endereço.</p></a>
+  </div>
+</main></div>
+<script src="../assets/js/mock-data.js"></script><script src="../assets/js/app.js"></script>
+<script>
+renderSidebar('overview','shop');
+const shop={...DEMO_USERS.shop,...JSON.parse(localStorage.getItem('cortaki_shop_profile')||'{}')};
+const savedServices=JSON.parse(localStorage.getItem('cortaki_shop_services')||'null');
+const savedBarbers=JSON.parse(localStorage.getItem('cortaki_shop_barbers')||'null');
+const services=Array.isArray(savedServices)?savedServices:(shop.services||[]);
+const barbers=Array.isArray(savedBarbers)?savedBarbers:BARBERS.filter(b=>b.shopId===shop.id);
+document.getElementById('shop-name').textContent=shop.name;
+document.getElementById('barbers-count').textContent=barbers.length;
+document.getElementById('services-count').textContent=services.filter(s=>s.active!==false).length;
+document.getElementById('online-count').textContent=barbers.filter(b=>b.online).length;
+document.getElementById('rating-average').textContent=barbers.length?(barbers.reduce((n,b)=>n+Number(b.rating||0),0)/barbers.length).toFixed(1)+' ★':'—';
+</script></body></html>

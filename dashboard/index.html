@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel do barbeiro — Navalha</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="wide-shell">
+  <div id="sidebar"></div>
+  <div class="main">
+    <div class="dashboard-page-logo">
+      <img src="../assets/img/logo-cortaki.png" data-brand-logo alt="CortaKi">
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:14px; margin-bottom:22px;">
+      <div>
+        <h1 class="display" style="font-size:24px;">Olá, <span id="me-name"></span> 👋</h1>
+        <p class="muted small" style="margin-top:4px;">Aqui está o resumo do seu dia na Navalha.</p>
+      </div>
+      <div class="card" style="display:flex; align-items:center; gap:12px; padding:12px 16px;">
+        <div>
+          <div style="font-weight:600; font-size:13.5px;" id="online-label">Disponível para chamadas</div>
+          <div class="small muted">Recebe pedidos do "Chamar agora"</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="online-toggle"><span class="track"></span></label>
+      </div>
+    </div>
+
+    <div id="incoming-slot"></div>
+
+    <div id="notificacoes" class="card" style="margin-bottom:22px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <span style="font-size:20px;">🔔</span>
+        <h2 style="font-size:16px; flex:1;">Notificações</h2>
+        <span class="badge badge-gold" id="notification-count">0</span>
+        <button class="btn btn-secondary btn-sm" id="mark-notifications-read">Marcar como lidas</button>
+      </div>
+      <div id="notification-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card"><div class="lbl">Atendimentos concluídos</div><div class="val mono" id="stat-count">0</div></div>
+      <div class="stat-card"><div class="lbl">Faturamento bruto</div><div class="val mono" id="stat-gross">R$ 0</div></div>
+      <div class="stat-card"><div class="lbl">Saldo líquido disponível</div><div class="val mono" id="stat-net">R$ 0</div><div class="small muted" style="margin-top:5px;">após taxa de ${PLATFORM_FEE_PCT}%</div></div>
+      <div class="stat-card"><div class="lbl">Avaliação média</div><div class="val mono" id="stat-rating">–</div></div>
+    </div>
+
+    <div class="section-title"><h2>Próximos atendimentos</h2><a class="link" href="agenda.html">Ver agenda</a></div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>Cliente</th><th>Serviços</th><th>Quando</th><th>Tipo</th><th>Valor</th><th>Status</th></tr></thead>
+        <tbody id="next-table"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/mock-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  renderSidebar('overview', 'barber');
+  const me = DEMO_USERS.barber;
+  const BARBER_NOTIFICATIONS_KEY = 'navalha_barber_notifications';
+  const APPOINTMENTS_KEY = 'navalha_appointments';
+  document.getElementById('me-name').textContent = me.name.split(' ')[0];
+
+  const toggle = document.getElementById('online-toggle');
+  const storedWorkStatus = localStorage.getItem(`cortaki_barber_online_${me.id}`);
+  me.online = storedWorkStatus === null ? me.online : storedWorkStatus === 'true';
+  toggle.checked = me.online;
+  document.getElementById('online-label').textContent = me.online ? 'Expediente iniciado' : 'Expediente encerrado';
+  toggle.addEventListener('change', () => {
+    me.online = toggle.checked;
+    localStorage.setItem(`cortaki_barber_online_${me.id}`, String(me.online));
+    document.getElementById('online-label').textContent = me.online ? 'Expediente iniciado' : 'Expediente encerrado';
+  });
+
+  const wallet = computeWallet(me);
+  document.getElementById('stat-count').textContent = wallet.completed.length;
+  document.getElementById('stat-gross').textContent = formatBRL(wallet.gross);
+  document.getElementById('stat-net').textContent = formatBRL(wallet.available);
+  document.getElementById('stat-rating').textContent = me.rating.toFixed(1) + ' ★';
+
+  let savedAppointments = [];
+  try { savedAppointments = JSON.parse(localStorage.getItem(APPOINTMENTS_KEY) || '[]'); } catch {}
+  const allAppointments = [...(Array.isArray(savedAppointments) ? savedAppointments : []), ...APPOINTMENTS].filter((appointment, index, list) => list.findIndex(item => item.id === appointment.id) === index);
+  const mine = allAppointments.filter(a => a.barberId === me.id && !['Concluído', 'Cancelado', 'Encerrado sem verificação'].includes(a.status));
+  document.getElementById('next-table').innerHTML = mine.length ? mine.map(a => `
+    <tr class="clickable" onclick="location.href='../atendimento.html?id=${a.id}&view=barbeiro'">
+      <td>${a.customerName}</td>
+      <td>${(a.serviceNames || []).join(', ')}</td>
+      <td class="mono">${a.date} ${a.time}</td>
+      <td>${a.mode === 'chamada' ? '⚡ Chamada' : '🗓️ Agendado'}</td>
+      <td class="mono">${formatBRL(a.price)}</td>
+      <td><span class="badge ${statusBadgeClass(a.status)}">${a.status}</span></td>
+    </tr>
+  `).join('') : `<tr><td colspan="6" class="muted" style="text-align:center; padding:26px;">Nenhum atendimento pendente.</td></tr>`;
+
+  function getBarberNotifications() {
+    let notifications = [];
+    try { notifications = JSON.parse(localStorage.getItem(BARBER_NOTIFICATIONS_KEY) || '[]'); } catch {}
+    if (!Array.isArray(notifications)) notifications = [];
+    const seeds = [
+      { id: 'barber-platform-security-v1', barberId: me.id, type: 'platform-change', message: 'A verificação por código agora protege o início e a conclusão de todos os serviços.' },
+      { id: 'barber-withdrawal-demo-v1', barberId: me.id, type: 'withdrawal-completed', message: 'Sua solicitação de saque mais recente foi concluída.' }
+    ];
+    seeds.forEach(seed => {
+      if (!notifications.some(item => item.id === seed.id)) notifications.push({ ...seed, createdAt: new Date().toISOString(), read: false });
+    });
+    localStorage.setItem(BARBER_NOTIFICATIONS_KEY, JSON.stringify(notifications));
+    return notifications.filter(item => item.barberId === me.id);
+  }
+
+  function renderNotifications() {
+    const notifications = getBarberNotifications();
+    document.getElementById('notification-count').textContent = notifications.filter(item => !item.read).length;
+    document.getElementById('notification-list').innerHTML = notifications.length ? notifications.map(item => `
+      <div style="padding:10px 0; border-top:1px solid var(--border);">
+        <strong style="font-size:13px;">${item.type === 'service-started' ? '✂️ Atendimento iniciado' : item.type === 'withdrawal-completed' ? '💸 Saque concluído' : '✨ Mudança na plataforma'}</strong>
+        <div class="small muted" style="margin-top:3px;">${item.message}</div>
+      </div>
+    `).join('') : `<div class="small muted">Nenhuma notificação.</div>`;
+  }
+
+  document.getElementById('mark-notifications-read').addEventListener('click', () => {
+    let all = [];
+    try { all = JSON.parse(localStorage.getItem(BARBER_NOTIFICATIONS_KEY) || '[]'); } catch {}
+    all.forEach(item => { if (item.barberId === me.id) item.read = true; });
+    localStorage.setItem(BARBER_NOTIFICATIONS_KEY, JSON.stringify(all));
+    renderNotifications();
+  });
+  renderNotifications();
+
+  // simula uma chamada instantânea chegando (estilo Uber) alguns segundos após abrir o painel
+  if (me.online) {
+    setTimeout(showIncomingCall, 3200);
+  }
+
+  function showIncomingCall() {
+    const services = [SERVICE_CATALOG.find(s => s.id === 'svc-corte'), SERVICE_CATALOG.find(s => s.id === 'svc-barba')];
+    const price = services.reduce((s, x) => s + x.price, 0);
+    const box = document.getElementById('incoming-slot');
+    box.innerHTML = `
+      <div class="incoming-banner" id="incoming-banner">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span class="badge badge-gold">⚡ Nova chamada</span>
+          <span class="mono price" style="color:var(--gold-bright);">${formatBRL(price)}</span>
+        </div>
+        <div style="margin-top:10px; font-size:14.5px; font-weight:600;">Bruno Santos · ${services.map(s => s.name).join(' + ')}</div>
+        <div class="small muted" style="margin-top:2px;">📍 Vila Nova · 2.1 km · atendimento a domicílio</div>
+        <div class="timer-bar"><div class="fill" style="animation-duration: 15s;" id="timer-fill"></div></div>
+        <div style="display:flex; gap:10px; margin-top:12px;">
+          <button class="btn btn-secondary btn-block" id="decline-call">Recusar</button>
+          <button class="btn btn-primary btn-block" id="accept-call">Aceitar</button>
+        </div>
+      </div>
+    `;
+    const timeout = setTimeout(() => { box.innerHTML = ''; }, 15000);
+    document.getElementById('accept-call').addEventListener('click', () => {
+      clearTimeout(timeout);
+      location.href = 'chamar.html';
+    });
+    document.getElementById('decline-call').addEventListener('click', () => { box.innerHTML = ''; });
+  }
+</script>
+</body>
+</html>

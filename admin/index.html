@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel administrativo — Navalha</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="wide-shell">
+  <div id="sidebar"></div>
+  <div class="main">
+    <h1 class="display" style="font-size:24px; margin-bottom:6px;">Visão geral da plataforma</h1>
+    <p class="muted small" style="margin-bottom:22px;">Métricas gerais — use o menu para ver barbeiro por barbeiro ou barbearia por barbearia.</p>
+
+    <div id="notificacoes" class="card" style="margin-bottom:22px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <span style="font-size:20px;">🔔</span>
+        <h2 style="font-size:16px; flex:1;">Notificações administrativas</h2>
+        <span class="badge badge-gold" id="admin-notification-count">0</span>
+        <button class="btn btn-secondary btn-sm" id="admin-mark-read">Marcar como lidas</button>
+      </div>
+      <div id="admin-notification-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+    </div>
+
+    <div class="stat-grid" style="margin-bottom:28px;">
+      <div class="stat-card"><div class="lbl">Atendimentos concluídos</div><div class="val mono" id="s-count">0</div></div>
+      <div class="stat-card"><div class="lbl">Faturamento bruto (GMV)</div><div class="val mono" id="s-gross">R$ 0</div></div>
+      <div class="stat-card"><div class="lbl">Receita da plataforma (${PLATFORM_FEE_PCT}%)</div><div class="val mono" id="s-fee" style="color:var(--gold-bright);">R$ 0</div></div>
+      <div class="stat-card"><div class="lbl">Ticket médio</div><div class="val mono" id="s-avg">R$ 0</div></div>
+      <div class="stat-card"><div class="lbl">Barbeiros ativos</div><div class="val mono" id="s-barbers">0</div><div class="small muted" style="margin-top:5px;" id="s-online">0 online agora</div></div>
+      <div class="stat-card"><div class="lbl">Barbearias parceiras</div><div class="val mono" id="s-shops">0</div></div>
+    </div>
+
+    <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:28px;">
+      <a href="barbeiros.html" class="card" style="flex:1 1 260px; display:flex; align-items:center; gap:12px;">
+        <div style="width:42px; height:42px; border-radius:12px; background:var(--gold-wash); display:flex; align-items:center; justify-content:center; font-size:20px;">💈</div>
+        <div style="flex:1;"><div style="font-weight:700; font-size:14.5px;">Ver barbeiro por barbeiro</div><div class="small muted">Perfil, agenda, extrato e saldo individual</div></div>
+        <span style="color:var(--gold-bright);">→</span>
+      </a>
+      <a href="barbearias.html" class="card" style="flex:1 1 260px; display:flex; align-items:center; gap:12px;">
+        <div style="width:42px; height:42px; border-radius:12px; background:var(--gold-wash); display:flex; align-items:center; justify-content:center; font-size:20px;">🏪</div>
+        <div style="flex:1;"><div style="font-weight:700; font-size:14.5px;">Ver por barbearia</div><div class="small muted">Barbeiros vinculados e faturamento agregado</div></div>
+        <span style="color:var(--gold-bright);">→</span>
+      </a>
+    </div>
+
+    <div class="section-title" id="financeiro"><h2>Ranking de barbeiros por faturamento</h2><a class="link" href="barbeiros.html">Ver todos</a></div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>Barbeiro</th><th>Barbearia</th><th>Atendimentos</th><th>Faturamento bruto</th><th>Repasse (95%)</th><th></th></tr></thead>
+        <tbody id="ranking"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/mock-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  renderSidebar('overview', 'admin');
+  const ADMIN_NOTIFICATIONS_KEY = 'navalha_admin_notifications';
+
+  function getAdminNotifications() {
+    let notifications = [];
+    try { notifications = JSON.parse(localStorage.getItem(ADMIN_NOTIFICATIONS_KEY) || '[]'); } catch {}
+    if (!Array.isArray(notifications)) notifications = [];
+    const pendingWithdrawals = BARBERS.reduce((total, barber) => total + (barber.wallet?.withdrawals || []).filter(withdrawal => withdrawal.status === 'Pendente').length, 0);
+    const seeds = [
+      { id: 'admin-new-barbers-v1', type: 'new-barbers', message: `${BARBERS.length} barbeiro(s) cadastrado(s) aguardam acompanhamento na plataforma.` },
+      { id: 'admin-new-shops-v1', type: 'new-shops', message: `${BARBERSHOPS.length} barbearia(s) parceira(s) cadastrada(s).` },
+      { id: 'admin-withdrawals-v1', type: 'withdrawals', message: `${pendingWithdrawals} solicitação(ões) de saque pendente(s) para análise.` }
+    ];
+    seeds.forEach(seed => {
+      if (!notifications.some(item => item.id === seed.id)) notifications.push({ ...seed, createdAt: new Date().toISOString(), read: false });
+    });
+    localStorage.setItem(ADMIN_NOTIFICATIONS_KEY, JSON.stringify(notifications));
+    return notifications;
+  }
+
+  function renderAdminNotifications() {
+    const notifications = getAdminNotifications();
+    document.getElementById('admin-notification-count').textContent = notifications.filter(item => !item.read).length;
+    document.getElementById('admin-notification-list').innerHTML = notifications.map(item => `
+      <div style="padding:10px 0; border-top:1px solid var(--border);">
+        <strong style="font-size:13px;">${item.type === 'new-barbers' ? '💈 Novos barbeiros cadastrados' : item.type === 'new-shops' ? '🏪 Novas barbearias cadastradas' : '💸 Solicitações de saque'}</strong>
+        <div class="small muted" style="margin-top:3px;">${item.message}</div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('admin-mark-read').addEventListener('click', () => {
+    const notifications = getAdminNotifications();
+    notifications.forEach(item => { item.read = true; });
+    localStorage.setItem(ADMIN_NOTIFICATIONS_KEY, JSON.stringify(notifications));
+    renderAdminNotifications();
+  });
+  renderAdminNotifications();
+
+  const completed = APPOINTMENTS.filter(a => a.status === 'Concluído');
+  const gross = completed.reduce((s, a) => s + a.price, 0);
+  const fee = gross * PLATFORM_FEE_PCT / 100;
+
+  document.getElementById('s-count').textContent = completed.length;
+  document.getElementById('s-gross').textContent = formatBRL(gross);
+  document.getElementById('s-fee').textContent = formatBRL(fee);
+  document.getElementById('s-avg').textContent = formatBRL(completed.length ? gross / completed.length : 0);
+  document.getElementById('s-barbers').textContent = BARBERS.length;
+  document.getElementById('s-online').textContent = `${BARBERS.filter(b => b.online).length} online agora`;
+  document.getElementById('s-shops').textContent = BARBERSHOPS.length;
+
+  const ranked = BARBERS.map(b => {
+    const w = computeWallet(b);
+    return { barber: b, ...w };
+  }).sort((a, b) => b.gross - a.gross);
+
+  document.getElementById('ranking').innerHTML = ranked.map(r => {
+    const shop = r.barber.shopId ? getShopById(r.barber.shopId) : null;
+    return `<tr class="clickable" onclick="location.href='barbeiro-detalhe.html?id=${r.barber.id}'">
+      <td style="display:flex; align-items:center; gap:9px;"><img src="${r.barber.photo}" style="width:26px; height:26px; border-radius:7px;">${r.barber.name}</td>
+      <td class="muted">${shop ? shop.name : 'Autônomo'}</td>
+      <td class="mono">${r.completed.length}</td>
+      <td class="mono">${formatBRL(r.gross)}</td>
+      <td class="mono">${formatBRL(r.net)}</td>
+      <td style="color:var(--gold-bright);">Ver →</td>
+    </tr>`;
+  }).join('');
+</script>
+</body>
+</html>

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agenda — Navalha</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="wide-shell">
+  <div id="sidebar"></div>
+  <div class="main">
+    <h1 class="display" style="font-size:22px; margin-bottom:6px;">Sua agenda</h1>
+    <p class="muted small" style="margin-bottom:22px;">Edite sua disponibilidade, bloqueie horários em caso de imprevistos e gerencie os atendimentos.</p>
+
+    <div style="display:flex; gap:26px; flex-wrap:wrap;">
+      <div class="card" style="flex: 1 1 340px; max-width:400px;">
+        <div class="cal-month-nav">
+          <button id="cal-prev">‹</button>
+          <div class="lbl" id="cal-label" style="text-transform:capitalize;"></div>
+          <button id="cal-next">›</button>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+
+      <div style="flex: 1 1 320px;">
+        <h2 style="font-size:15px; margin-bottom:10px; text-transform:capitalize;" id="day-title">Selecione um dia</h2>
+        <div id="day-appointments" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>
+        <div id="day-slots-wrap"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/mock-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  renderSidebar('agenda', 'barber');
+  const me = DEMO_USERS.barber;
+  const APPOINTMENTS_KEY = 'navalha_appointments';
+  const BLOCKED_SLOTS_KEY = 'navalha_barber_blocked_slots';
+  const NOTIFICATIONS_KEY = 'navalha_customer_notifications';
+  let calYear = new Date().getFullYear(), calMonth = new Date().getMonth();
+  let selectedKey = dateKey(new Date());
+
+  function fmt2(n) { return String(n).padStart(2, '0'); }
+  function toBrDate(d) { return `${fmt2(d.getDate())}/${fmt2(d.getMonth() + 1)}/${d.getFullYear()}`; }
+
+  function getSavedAppointments() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(APPOINTMENTS_KEY) || '[]');
+      return Array.isArray(saved) ? saved : [];
+    } catch { return []; }
+  }
+
+  function getAllAppointments() {
+    const merged = [...getSavedAppointments(), ...APPOINTMENTS];
+    return merged.filter((appointment, index) => merged.findIndex(item => item.id === appointment.id) === index);
+  }
+
+  function appointmentIsOnDate(appointment, dateObj) {
+    return appointment.dateKey === dateKey(dateObj) || appointment.date === toBrDate(dateObj);
+  }
+
+  function getBlockedSlots() {
+    try {
+      const blocked = JSON.parse(localStorage.getItem(BLOCKED_SLOTS_KEY) || '{}');
+      return blocked && typeof blocked === 'object' ? blocked : {};
+    } catch { return {}; }
+  }
+
+  function toggleSlot(time) {
+    const dateObj = selectedDate();
+    if (isPastDay(dateObj) && selectedKey !== dateKey(new Date())) return;
+    const occupied = getAllAppointments().some(appointment =>
+      appointment.barberId === me.id && appointmentIsOnDate(appointment, dateObj) &&
+      appointment.time === time && appointment.status !== 'Cancelado'
+    );
+    if (occupied) {
+      alert('Este horário possui um atendimento e não pode ser alterado. Cancele o atendimento primeiro, se necessário.');
+      return;
+    }
+
+    const blocked = getBlockedSlots();
+    const daySlots = new Set(blocked[selectedKey] || []);
+    if (daySlots.has(time)) daySlots.delete(time); else daySlots.add(time);
+    blocked[selectedKey] = [...daySlots];
+    localStorage.setItem(BLOCKED_SLOTS_KEY, JSON.stringify(blocked));
+    renderDay();
+  }
+
+  function selectedDate() {
+    const [year, month, day] = selectedKey.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  async function cancelAppointment(id) {
+    const all = getAllAppointments();
+    const appointment = all.find(item => item.id === id);
+    if (!appointment) return;
+    if (appointment.securityVerified || appointment.security?.customerCheckIn?.at || appointment.security?.barberCheckIn?.at) {
+      const reason = await showAppPrompt('Este atendimento já possui registro de segurança. Informe o motivo para abrir uma análise:', '', { title: 'Abrir análise' });
+      if (reason?.trim()) {
+        openAppointmentDispute(appointment, 'barber', reason.trim());
+        alert('Contestação aberta. O valor ficará retido até a análise.');
+        renderCalendar(); renderDay();
+      }
+      return;
+    }
+    if (!await showAppConfirm(`Cancelar o atendimento de ${appointment.customerName}? O cliente será avisado e o pagamento será estornado.`, { title: 'Cancelar atendimento' })) return;
+
+    const saved = getSavedAppointments();
+    let stored = saved.find(item => item.id === id);
+    if (!stored) {
+      stored = JSON.parse(JSON.stringify(appointment));
+      saved.push(stored);
+    }
+    stored.status = 'Cancelado';
+    stored.cancelledBy = 'barber';
+    stored.cancelledAt = new Date().toISOString();
+    stored.cancellationReason = 'Cancelado pelo barbeiro devido a um imprevisto.';
+    stored.payment = { ...(stored.payment || {}), status: 'Reembolsado' };
+    localStorage.setItem(APPOINTMENTS_KEY, JSON.stringify(saved));
+
+    let notifications = [];
+    try { notifications = JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) || '[]'); } catch {}
+    if (!Array.isArray(notifications)) notifications = [];
+    notifications.unshift({
+      id: `notice-${Date.now()}`,
+      customerId: appointment.customerId,
+      appointmentId: appointment.id,
+      type: 'barber-cancellation',
+      message: `${me.name} cancelou seu atendimento de ${appointment.date} às ${appointment.time}. O pagamento será reembolsado.`,
+      createdAt: new Date().toISOString(),
+      read: false
+    });
+    localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifications));
+    renderCalendar();
+    renderDay();
+  }
+
+  function barberCheckIn(id) {
+    const appointment = getAllAppointments().find(item => item.id === id);
+    if (!appointment) return;
+    const result = recordPresenceCheckIn(appointment, 'barber');
+    alert(result.message);
+    renderDay();
+  }
+
+  async function reportSecurityProblem(id) {
+    const appointment = getAllAppointments().find(item => item.id === id);
+    if (!appointment) return;
+    const reason = await showAppPrompt('Descreva o problema. O pagamento ficará retido enquanto o caso for analisado:', '', { title: 'Reportar problema' });
+    if (!reason?.trim()) return;
+    openAppointmentDispute(appointment, 'barber', reason.trim());
+    alert('Ocorrência registrada na trilha de segurança.');
+    renderDay();
+  }
+
+  function renderCalendar() {
+    document.getElementById('cal-label').textContent = `${MONTH_NAMES[calMonth]} de ${calYear}`;
+    const weeks = buildMonthMatrix(calYear, calMonth);
+    document.getElementById('cal-grid').innerHTML = `
+      ${DOW_LABELS.map(d => `<div class="cal-dow">${d}</div>`).join('')}
+      ${weeks.flat().map(d => {
+        if (!d) return `<div class="cal-day empty"></div>`;
+        const key = dateKey(d);
+        const isOff = me.schedule.daysOff.includes(d.getDay());
+        const hasApt = getAllAppointments().some(a => a.barberId === me.id && appointmentIsOnDate(a, d) && a.status !== 'Cancelado');
+        const cls = ['cal-day'];
+        if (isPastDay(d) && key !== dateKey(new Date())) cls.push('past');
+        if (isOff) cls.push('no-slots');
+        if (key === selectedKey) cls.push('selected');
+        if (key === dateKey(new Date())) cls.push('today');
+        return `<div class="${cls.join(' ')}" data-key="${key}">${d.getDate()}${hasApt ? '<div class="dot" style="background:var(--gold-bright);"></div>' : ''}</div>`;
+      }).join('')}
+    `;
+    document.querySelectorAll('.cal-day[data-key]').forEach(cell => {
+      cell.addEventListener('click', () => { selectedKey = cell.dataset.key; renderCalendar(); renderDay(); });
+    });
+  }
+
+  function renderDay() {
+    const dateObj = selectedDate();
+    document.getElementById('day-title').textContent = formatDateLabel(dateObj);
+
+    processExpiredAppointmentSecurity();
+    const dayApts = getAllAppointments().filter(a => a.barberId === me.id && appointmentIsOnDate(a, dateObj) && a.status !== 'Cancelado');
+    document.getElementById('day-appointments').innerHTML = dayApts.length ? dayApts.map(a => `
+      <div class="card" style="padding:11px 13px;">
+        <div style="display:flex; justify-content:space-between;">
+          <strong style="font-size:13.5px;">${a.time} · ${a.customerName}</strong>
+          <span class="badge ${statusBadgeClass(a.status)}">${a.status}</span>
+        </div>
+        <div class="small muted" style="margin-top:3px;">${(a.serviceNames || []).join(', ')}</div>
+        ${a.mode === 'agendado' ? `
+          <div class="small muted" style="margin-top:7px;">🛡️ Presença: cliente ${a.security?.customerCheckIn?.at ? '✓' : '—'} · barbeiro ${a.security?.barberCheckIn?.at ? '✓' : '—'}</div>
+          ${securityWindowState(a).valid && !a.security?.barberCheckIn?.at ? `<button class="btn btn-secondary btn-sm" style="margin-top:9px;" onclick="barberCheckIn('${a.id}')">📍 Fazer check-in de presença</button>` : ''}
+          ${!['Concluído', 'Cancelado', 'Ausência do cliente', 'Ausência do barbeiro', 'Em análise de segurança'].includes(a.status) ? `<button class="btn btn-outline btn-sm" style="margin-top:9px;" onclick="reportSecurityProblem('${a.id}')">⚠️ Reportar problema</button>` : ''}
+        ` : ''}
+        ${['Confirmado', 'A caminho', 'Em atendimento'].includes(a.status) ? `<a class="btn btn-primary btn-sm" style="margin-top:9px;" href="../atendimento.html?id=${a.id}&view=barbeiro">Abrir atendimento seguro</a>` : ''}
+        ${a.status !== 'Concluído' ? `<button class="btn btn-danger btn-sm" style="margin-top:9px;" onclick="cancelAppointment('${a.id}')">Cancelar atendimento</button>` : ''}
+      </div>
+    `).join('') : `<div class="small muted">Nenhum atendimento marcado neste dia.</div>`;
+
+    if (me.schedule.daysOff.includes(dateObj.getDay())) {
+      document.getElementById('day-slots-wrap').innerHTML = `<div class="badge badge-muted">Dia de folga</div>`;
+      return;
+    }
+    const slots = getDaySlots(me, dateObj);
+    const blockedToday = new Set(getBlockedSlots()[selectedKey] || []);
+    const occupiedTimes = new Set(dayApts.map(appointment => appointment.time));
+    document.getElementById('day-slots-wrap').innerHTML = `
+      <div style="display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:8px;">
+        <div class="small muted">Toque em um horário livre para bloquear ou liberar</div>
+        <span class="badge badge-muted">${blockedToday.size} bloqueado(s)</span>
+      </div>
+      <div class="slot-grid">${slots.map(slot => {
+        const occupied = occupiedTimes.has(slot.time) || !slot.available;
+        const blocked = blockedToday.has(slot.time);
+        return `<button class="slot ${occupied || blocked ? 'unavailable' : ''}" data-time="${slot.time}" style="border:0; cursor:${occupied ? 'not-allowed' : 'pointer'}; position:relative;" ${occupied ? 'data-occupied="1"' : ''}>
+          ${slot.time}${occupied ? '<span style="display:block; font-size:9px;">ocupado</span>' : blocked ? '<span style="display:block; font-size:9px;">bloqueado</span>' : ''}
+        </button>`;
+      }).join('')}</div>
+    `;
+    document.querySelectorAll('#day-slots-wrap .slot[data-time]').forEach(slot => {
+      slot.addEventListener('click', () => toggleSlot(slot.dataset.time));
+    });
+  }
+
+  document.getElementById('cal-prev').addEventListener('click', () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar(); });
+  document.getElementById('cal-next').addEventListener('click', () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar(); });
+
+  processExpiredAppointmentSecurity();
+  renderCalendar();
+  renderDay();
+</script>
+</body>
+</html>

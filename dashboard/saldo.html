@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Saldo — Navalha</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="wide-shell">
+  <div id="sidebar"></div>
+  <div class="main">
+    <h1 class="display" style="font-size:22px; margin-bottom:6px;">Sua carteira</h1>
+    <p class="muted small" style="margin-bottom:22px;">A Navalha retém ${PLATFORM_FEE_PCT}% de taxa da plataforma sobre cada serviço concluído.</p>
+
+    <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:26px;">
+      <div class="card" style="flex:1 1 220px;">
+        <div class="small muted">Saldo bruto (sem desconto)</div>
+        <div class="mono" style="font-size:26px; font-weight:700; margin-top:6px;" id="w-gross">R$ 0</div>
+        <div class="small muted" style="margin-top:6px;" id="w-count">0 atendimentos concluídos</div>
+      </div>
+      <div class="card" style="flex:1 1 220px; border-color: var(--danger); background: var(--danger-wash);">
+        <div class="small" style="color:var(--danger);">Taxa da plataforma (${PLATFORM_FEE_PCT}%)</div>
+        <div class="mono" style="font-size:26px; font-weight:700; margin-top:6px; color:var(--danger);" id="w-fee">− R$ 0</div>
+      </div>
+      <div class="card" style="flex:1 1 220px; border-color: var(--gold-dim); background: linear-gradient(180deg, var(--gold-wash), var(--surface));">
+        <div class="small" style="color:var(--gold-bright);">Saldo líquido (com desconto)</div>
+        <div class="mono" style="font-size:26px; font-weight:700; margin-top:6px; color:var(--gold-bright);" id="w-net">R$ 0</div>
+      </div>
+      <div class="card" style="flex:1 1 220px;">
+        <div class="small muted">Disponível para saque</div>
+        <div class="mono" style="font-size:26px; font-weight:700; margin-top:6px;" id="w-available">R$ 0</div>
+        <button class="btn btn-primary btn-block" id="btn-withdraw" style="margin-top:12px;">Solicitar saque</button>
+      </div>
+    </div>
+
+    <div id="withdraw-form" style="display:none; max-width:420px; margin-bottom:26px;" class="card">
+      <div class="field">
+        <label>Valor a sacar</label>
+        <input type="number" id="withdraw-amount" min="1" step="1">
+        <div class="hint" id="withdraw-hint"></div>
+      </div>
+      <div class="field">
+        <label>Chave Pix de recebimento</label>
+        <input type="text" placeholder="cpf, e-mail ou telefone" value="joao.silva@email.com">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-secondary btn-block" id="cancel-withdraw">Cancelar</button>
+        <button class="btn btn-primary btn-block" id="confirm-withdraw">Confirmar saque</button>
+      </div>
+    </div>
+
+    <div class="section-title"><h2>Extrato de atendimentos</h2></div>
+    <div class="tbl-wrap" style="margin-bottom:26px;">
+      <table class="tbl">
+        <thead><tr><th>Data</th><th>Cliente</th><th>Valor bruto</th><th>Taxa (${PLATFORM_FEE_PCT}%)</th><th>Valor líquido</th></tr></thead>
+        <tbody id="extrato"></tbody>
+      </table>
+    </div>
+
+    <div class="section-title"><h2>Histórico de saques</h2></div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>Data</th><th>Valor</th><th>Status</th></tr></thead>
+        <tbody id="withdrawals"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/mock-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  renderSidebar('saldo', 'barber');
+  const me = DEMO_USERS.barber;
+
+  function render() {
+    const w = computeWallet(me);
+    document.getElementById('w-gross').textContent = formatBRL(w.gross);
+    document.getElementById('w-count').textContent = `${w.completed.length} atendimentos concluídos`;
+    document.getElementById('w-fee').textContent = '− ' + formatBRL(w.fee);
+    document.getElementById('w-net').textContent = formatBRL(w.net);
+    document.getElementById('w-available').textContent = formatBRL(w.available);
+    document.getElementById('withdraw-hint').textContent = `Disponível: ${formatBRL(w.available)}`;
+    document.getElementById('btn-withdraw').disabled = w.available <= 0;
+    document.getElementById('btn-withdraw').style.opacity = w.available <= 0 ? '.4' : '1';
+
+    document.getElementById('extrato').innerHTML = w.completed.length ? w.completed.map(a => {
+      const fee = +(a.price * PLATFORM_FEE_PCT / 100).toFixed(2);
+      return `<tr>
+        <td class="mono">${a.date}</td>
+        <td>${a.customerName}</td>
+        <td class="mono">${formatBRL(a.price)}</td>
+        <td class="mono" style="color:var(--danger);">− ${formatBRL(fee)}</td>
+        <td class="mono" style="color:var(--gold-bright);">${formatBRL(a.price - fee)}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="5" class="muted" style="text-align:center; padding:24px;">Nenhum atendimento concluído ainda.</td></tr>`;
+
+    document.getElementById('withdrawals').innerHTML = w.withdrawals.length ? [...w.withdrawals].reverse().map(x => `
+      <tr><td class="mono">${x.date}</td><td class="mono">${formatBRL(x.amount)}</td><td><span class="badge ${x.status === 'Pago' ? 'badge-success' : 'badge-gold'}">${x.status}</span></td></tr>
+    `).join('') : `<tr><td colspan="3" class="muted" style="text-align:center; padding:24px;">Nenhum saque realizado ainda.</td></tr>`;
+  }
+
+  document.getElementById('btn-withdraw').addEventListener('click', () => {
+    document.getElementById('withdraw-form').style.display = 'block';
+    document.getElementById('withdraw-amount').value = computeWallet(me).available;
+  });
+  document.getElementById('cancel-withdraw').addEventListener('click', () => {
+    document.getElementById('withdraw-form').style.display = 'none';
+  });
+  document.getElementById('confirm-withdraw').addEventListener('click', () => {
+    const amount = Number(document.getElementById('withdraw-amount').value);
+    const available = computeWallet(me).available;
+    if (!amount || amount <= 0 || amount > available) { alert('Informe um valor válido (até o saldo disponível).'); return; }
+    const today = new Date();
+    me.wallet.withdrawals.push({
+      id: 'w-' + Date.now(),
+      date: `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`,
+      amount, status: 'Pendente',
+    });
+    document.getElementById('withdraw-form').style.display = 'none';
+    render();
+  });
+
+  render();
+</script>
+</body>
+</html>
